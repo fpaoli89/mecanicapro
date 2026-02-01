@@ -1,67 +1,73 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-from datetime import datetime
 import uuid
 
-# 1. Configuración al principio del todo
+# 1. Configuración obligatoria al inicio
 st.set_page_config(page_title="Mecánica Pro", layout="wide")
 
 # 2. Inicialización del estado (Session State)
 if 'carrito' not in st.session_state:
     st.session_state.carrito = []
 
-# 3. Función para limpiar el formulario (evita errores de renderizado)
-def borrar_todo():
-    st.session_state.carrito = []
-    st.rerun()
+# --- FUNCIONES DE CONTROL ---
+def agregar_item(d, c, p):
+    if d and p > 0:
+        st.session_state.carrito.append({
+            "ID": str(len(st.session_state.carrito) + 1),
+            "Descripción": d,
+            "Cantidad": c,
+            "Precio Unit.": p,
+            "Subtotal": c * p
+        })
 
+def vaciar_carrito():
+    st.session_state.carrito = []
+
+# --- INTERFAZ DE USUARIO ---
 st.title("🔧 Mecánica Pro")
 
-# 4. Datos del Cliente (Usamos claves únicas 'key')
+# Sección de Cliente (Estática)
 with st.container(border=True):
     st.subheader("👤 Datos del Cliente")
     col1, col2, col3 = st.columns(3)
-    cliente = col1.text_input("Nombre", key="input_cliente")
-    vehiculo = col2.text_input("Vehículo", key="input_vehiculo")
-    patente = col3.text_input("Patente", key="input_patente")
+    cliente = col1.text_input("Nombre", key="cli_nom")
+    vehiculo = col2.text_input("Vehículo", key="cli_veh")
+    patente = col3.text_input("Patente", key="cli_pat")
 
-# 5. Agregar Items
+# Sección de Carga (Usamos FORM para evitar el error de removeChild)
 st.subheader("🛠️ Detalle del Presupuesto")
-with st.container(border=True):
+with st.form("formulario_carga", clear_on_submit=True):
     c1, c2, c3 = st.columns([3, 1, 1])
-    desc = c1.text_input("Descripción", key="input_desc")
-    cant = c2.number_input("Cant.", min_value=1, value=1, key="input_cant")
-    precio = c3.number_input("Precio Unit.", min_value=0.0, step=100.0, key="input_precio")
+    desc_f = c1.text_input("Descripción (Repuesto o Servicio)")
+    cant_f = c2.number_input("Cantidad", min_value=1, value=1)
+    prec_f = c3.number_input("Precio Unitario", min_value=0.0, step=100.0)
     
-    # El truco: No hacemos rerun aquí adentro, dejamos que el flujo siga
-    if st.button("➕ Agregar Item", key="btn_agregar"):
-        if desc and precio > 0:
-            st.session_state.carrito.append({
-                "ID": str(len(st.session_state.carrito) + 1),
-                "Descripción": desc,
-                "Cantidad": cant,
-                "Precio Unit.": precio,
-                "Subtotal": cant * precio
-            })
-            st.rerun()
+    submit = st.form_submit_button("➕ Agregar a la lista")
+    if submit:
+        agregar_item(desc_f, cant_f, prec_f)
+        st.rerun()
 
-# 6. Mostrar el carrito de forma estable
+# Sección de Visualización (Separada físicamente)
 if st.session_state.carrito:
-    st.divider()
+    st.write("---")
     df_carrito = pd.DataFrame(st.session_state.carrito)
     
-    # Usamos dataframe en lugar de table para evitar el error de 'removeChild'
-    st.dataframe(df_carrito, use_container_width=True, hide_index=True)
+    # Mostramos los datos de forma simple
+    st.dataframe(
+        df_carrito, 
+        use_container_width=True, 
+        hide_index=True,
+        key="tabla_presupuesto"
+    )
     
     total = df_carrito["Subtotal"].sum()
-    st.metric(label="TOTAL A PAGAR", value=f"$ {total:,.2f}")
+    st.metric("TOTAL PRESUPUESTO", f"$ {total:,.2f}")
 
-    col_save, col_del = st.columns([1, 4])
-    
-    if col_save.button("💾 Guardar", key="btn_guardar"):
-        st.success("Guardado exitosamente (Simulado)")
-        # Aquí irá la conexión a GSheets
+    c_save, c_empty = st.columns([1, 4])
+    if c_save.button("💾 Guardar en Excel"):
+        st.info("Conectando con Google Sheets...")
+        # Aquí irá la lógica de guardado una vez verifiquemos estabilidad
         
-    if col_del.button("🗑️ Vaciar", on_click=borrar_todo, key="btn_vaciar"):
-        pass # La función borrar_todo hace el trabajo
+    if c_empty.button("🗑️ Vaciar Todo"):
+        vaciar_carrito()
+        st.rerun()
