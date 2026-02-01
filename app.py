@@ -1,73 +1,64 @@
 import streamlit as st
 import pandas as pd
-import uuid
 
-# 1. Configuración obligatoria al inicio
-st.set_page_config(page_title="Mecánica Pro", layout="wide")
+# 1. Configuración de página
+st.set_page_config(page_title="Mecanica Pro", layout="centered")
 
-# 2. Inicialización del estado (Session State)
+# 2. Inicializar el carrito en la sesión
 if 'carrito' not in st.session_state:
     st.session_state.carrito = []
 
-# --- FUNCIONES DE CONTROL ---
-def agregar_item(d, c, p):
+# 3. FUNCIONES (Separar la lógica de la interfaz ayuda a evitar errores de Node)
+def agregar_a_lista():
+    # Obtenemos los datos de los inputs usando sus claves (keys)
+    d = st.session_state.temp_desc
+    c = st.session_state.temp_cant
+    p = st.session_state.temp_prec
+    
     if d and p > 0:
         st.session_state.carrito.append({
-            "ID": str(len(st.session_state.carrito) + 1),
             "Descripción": d,
             "Cantidad": c,
-            "Precio Unit.": p,
+            "Precio": p,
             "Subtotal": c * p
         })
+    # Al terminar la función, Streamlit limpia los inputs automáticamente por el clear_on_submit
 
-def vaciar_carrito():
-    st.session_state.carrito = []
-
-# --- INTERFAZ DE USUARIO ---
+# --- INTERFAZ ---
 st.title("🔧 Mecánica Pro")
 
-# Sección de Cliente (Estática)
+# FORMULARIO DE CLIENTE (Simple, sin columnas para máxima estabilidad)
 with st.container(border=True):
-    st.subheader("👤 Datos del Cliente")
-    col1, col2, col3 = st.columns(3)
-    cliente = col1.text_input("Nombre", key="cli_nom")
-    vehiculo = col2.text_input("Vehículo", key="cli_veh")
-    patente = col3.text_input("Patente", key="cli_pat")
+    st.text_input("Nombre del Cliente", key="cli_nombre")
+    st.text_input("Vehículo y Patente", key="cli_vehiculo")
 
-# Sección de Carga (Usamos FORM para evitar el error de removeChild)
-st.subheader("🛠️ Detalle del Presupuesto")
-with st.form("formulario_carga", clear_on_submit=True):
-    c1, c2, c3 = st.columns([3, 1, 1])
-    desc_f = c1.text_input("Descripción (Repuesto o Servicio)")
-    cant_f = c2.number_input("Cantidad", min_value=1, value=1)
-    prec_f = c3.number_input("Precio Unitario", min_value=0.0, step=100.0)
+st.write("### 🛠️ Agregar Trabajo o Repuesto")
+
+# FORMULARIO DE CARGA CON KEY ÚNICA
+with st.form(key="form_trabajo", clear_on_submit=True):
+    st.text_input("Descripción del trabajo/repuesto", key="temp_desc")
+    st.number_input("Cantidad", min_value=1, value=1, key="temp_cant")
+    st.number_input("Precio Unitario", min_value=0.0, step=100.0, key="temp_prec")
     
-    submit = st.form_submit_button("➕ Agregar a la lista")
-    if submit:
-        agregar_item(desc_f, cant_f, prec_f)
-        st.rerun()
+    # El botón llama a la función de arriba
+    submit = st.form_submit_button("Añadir a la lista", on_click=agregar_a_lista)
 
-# Sección de Visualización (Separada físicamente)
+# VISUALIZACIÓN (Solo si hay items)
 if st.session_state.carrito:
     st.write("---")
-    df_carrito = pd.DataFrame(st.session_state.carrito)
+    st.write("### 📋 Resumen del Presupuesto")
     
-    # Mostramos los datos de forma simple
-    st.dataframe(
-        df_carrito, 
-        use_container_width=True, 
-        hide_index=True,
-        key="tabla_presupuesto"
-    )
+    # Convertimos a DataFrame para mostrarlo
+    df = pd.DataFrame(st.session_state.carrito)
     
-    total = df_carrito["Subtotal"].sum()
-    st.metric("TOTAL PRESUPUESTO", f"$ {total:,.2f}")
+    # IMPORTANTE: Usamos st.write(df) que es la forma más básica y estable de mostrar tablas
+    st.write(df)
+    
+    total = sum(item['Subtotal'] for item in st.session_state.carrito)
+    st.divider()
+    st.system_note = f"**TOTAL: ${total:,.2f}**"
+    st.markdown(f"## TOTAL: ${total:,.2f}")
 
-    c_save, c_empty = st.columns([1, 4])
-    if c_save.button("💾 Guardar en Excel"):
-        st.info("Conectando con Google Sheets...")
-        # Aquí irá la lógica de guardado una vez verifiquemos estabilidad
-        
-    if c_empty.button("🗑️ Vaciar Todo"):
-        vaciar_carrito()
+    if st.button("🗑️ Vaciar y empezar de nuevo"):
+        st.session_state.carrito = []
         st.rerun()
