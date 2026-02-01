@@ -83,7 +83,31 @@ if st.session_state.carrito:
     if st.button("💾 GUARDAR Y GENERAR PDF", use_container_width=True):
         try:
             id_p = str(uuid.uuid4())[:8].upper()
-            # ... (Lógica de guardado en GSheets que ya tienes funcionando) ...
+            fecha_h = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+            # --- LÓGICA DE GUARDADO INTEGRADA ---
+            nuevo_res = pd.DataFrame([{"id_presupuesto":id_p,"cliente":cliente,"vehiculo":vehiculo,"fecha":fecha_h,"total":total}])
+            
+            detalles_list = []
+            for item in st.session_state.carrito:
+                detalles_list.append({"id_presupuesto":id_p,"descripcion":item["Descripción"],"cantidad":item["Cantidad"],"precio":item["Precio Unit."],"subtotal":item["Subtotal"]})
+            df_det = pd.DataFrame(detalles_list)
+
+            # Guardar en Resumen
+            try:
+                r_exist = conn.read(worksheet="Resumen")
+                conn.update(worksheet="Resumen", data=pd.concat([r_exist, nuevo_res], ignore_index=True))
+            except:
+                conn.create(worksheet="Resumen", data=nuevo_res)
+
+            # Guardar en Detalles
+            try:
+                d_exist = conn.read(worksheet="Detalles")
+                conn.update(worksheet="Detalles", data=pd.concat([d_exist, df_det], ignore_index=True))
+            except:
+                conn.create(worksheet="Detalles", data=df_det)
+            
+            # --- FIN LÓGICA DE GUARDADO ---
             
             # Generar PDF
             pdf_bytes = crear_pdf(cliente, vehiculo, st.session_state.carrito, total, id_p)
@@ -96,6 +120,9 @@ if st.session_state.carrito:
             texto_url = urllib.parse.quote(texto)
             ws_link = f"https://wa.me/{telefono}?text={texto_url}"
             st.link_button("📲 Enviar Aviso por WhatsApp", ws_link)
+            
+            # Limpiar carrito después de guardar
+            st.session_state.carrito = []
             
         except Exception as e:
             st.error(f"Error: {e}")
