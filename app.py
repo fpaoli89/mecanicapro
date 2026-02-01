@@ -98,18 +98,24 @@ if st.session_state.carrito:
                     })
                 df_detalles = pd.DataFrame(detalles_list)
                 
-                # 3. Guardar en Google Sheets
-                # Nota: spreadsheet= debe estar en tus secrets o pasarlo aquí
-                conn.create(worksheet="Resumen", data=nuevo_resumen)
-                conn.create(worksheet="Detalles", data=df_detalles)
-                
-                st.success(f"✅ Presupuesto #{id_presupuesto} guardado con éxito")
-                st.balloons()
-                # Opcional: limpiar_todo() después de guardar
-            except Exception as e:
-                st.error(f"Error al guardar: {e}")
-                st.info("Revisa si las pestañas 'Resumen' y 'Detalles' existen en tu Excel.")
+                # 3. Guardar en Google Sheets (Versión forzada)
+                # Primero leemos lo que ya hay (si existe) para no romper la estructura
+                try:
+                    existing_resumen = conn.read(worksheet="Resumen")
+                    updated_resumen = pd.concat([existing_resumen, nuevo_resumen], ignore_index=True)
+                    conn.update(worksheet="Resumen", data=updated_resumen)
+                except:
+                    # Si falla la lectura, intentamos crearla de cero
+                    conn.create(worksheet="Resumen", data=nuevo_resumen)
+
+                try:
+                    existing_detalles = conn.read(worksheet="Detalles")
+                    updated_detalles = pd.concat([existing_detalles, df_detalles], ignore_index=True)
+                    conn.update(worksheet="Detalles", data=updated_detalles)
+                except:
+                    conn.create(worksheet="Detalles", data=df_detalles)
 
     if col_clear.button("🗑️ VACIAR TODO", use_container_width=True):
         limpiar_todo()
         st.rerun()
+
