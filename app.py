@@ -5,6 +5,7 @@ from datetime import datetime
 import uuid
 from fpdf import FPDF
 import urllib.parse
+import pytz # Para la hora exacta de Argentina
 
 # 1. Configuración de página
 st.set_page_config(page_title="Taller Mecánico El Fer", layout="centered", page_icon="🔧")
@@ -17,32 +18,35 @@ if 'carrito' not in st.session_state:
     st.session_state.carrito = []
 
 # --- FUNCIÓN DE PDF MEJORADA ---
-def crear_pdf(cliente, vehiculo, items, total, id_p, fecha=None):
-    if fecha is None:
-        fecha = datetime.now().strftime('%d/%m/%Y')
+def crear_pdf(cliente, vehiculo, items, total, id_p, fecha_str=None):
+    # Si no hay fecha (nuevo presupuesto), usamos la actual de Argentina
+    if fecha_str is None:
+        tz = pytz.timezone('America/Argentina/Buenos_Aires')
+        fecha_str = datetime.now(tz).strftime('%d/%m/%Y %H:%M')
     
     pdf = FPDF()
     pdf.add_page()
     
-    # --- ENCABEZADO PROFESIONAL ---
-    # Rectángulo azul de fondo para el encabezado
+    # --- ENCABEZADO ---
     pdf.set_fill_color(30, 60, 120) 
-    pdf.rect(0, 0, 210, 45, 'F')
+    pdf.rect(0, 0, 210, 55, 'F')
     
-    pdf.set_font("Arial", "B", 24)
     pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 24)
     pdf.cell(190, 15, "TALLER MECÁNICO EL FER", ln=True, align="L")
     
+    # Datos bajo el título
     pdf.set_font("Arial", "", 10)
-    pdf.cell(190, 5, "Servicio Integral Automotriz", ln=True, align="L")
-    pdf.cell(190, 5, f"Presupuesto N°: {id_p} | Fecha: {fecha}", ln=True, align="L")
+    pdf.cell(190, 5, "Dirección: 18 n° 960, Gral. Pico, La Pampa", ln=True, align="L")
+    pdf.cell(190, 5, "WhatsApp: 5492302645333", ln=True, align="L")
+    pdf.cell(190, 5, f"Presupuesto N°: {id_p} | Fecha: {fecha_str}", ln=True, align="L")
     
-    pdf.ln(20) # Espacio para salir del encabezado azul
+    pdf.ln(25) # Salto para el cuerpo del PDF
     
     # --- DATOS DEL CLIENTE ---
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(190, 10, "INFORMACIÓN DEL CLIENTE Y VEHÍCULO", ln=True)
+    pdf.cell(190, 10, "DETALLES DEL CLIENTE Y VEHÍCULO", ln=True)
     pdf.set_draw_color(30, 60, 120)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(3)
@@ -53,15 +57,13 @@ def crear_pdf(cliente, vehiculo, items, total, id_p, fecha=None):
     pdf.ln(8)
     
     # --- TABLA DE ITEMS ---
-    # Cabecera de tabla
     pdf.set_fill_color(240, 240, 240)
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(100, 10, " Descripción del Trabajo / Repuesto", 1, 0, "L", True)
+    pdf.cell(100, 10, " Descripción", 1, 0, "L", True)
     pdf.cell(20, 10, "Cant.", 1, 0, "C", True)
     pdf.cell(35, 10, "Precio U.", 1, 0, "C", True)
     pdf.cell(35, 10, "Subtotal", 1, 1, "C", True)
     
-    # Cuerpo de tabla
     pdf.set_font("Arial", "", 10)
     for i in items:
         desc = i.get("Descripción") or i.get("descripcion")
@@ -82,35 +84,26 @@ def crear_pdf(cliente, vehiculo, items, total, id_p, fecha=None):
     pdf.cell(155, 12, "TOTAL FINAL ", 0, 0, "R", True)
     pdf.cell(35, 12, f"${float(total):,.2f} ", 0, 1, "R", True)
     
-    # --- PIE DE PÁGINA (Tus datos) ---
-    pdf.set_y(-35)
-    pdf.set_text_color(80, 80, 80)
-    pdf.set_font("Arial", "I", 9)
-    pdf.cell(190, 5, "Este presupuesto tiene una validez de 7 días.", ln=True, align="C")
-    pdf.set_font("Arial", "B", 9)
-    pdf.cell(190, 5, "Dirección: 18 n° 960, Gral. Pico, La Pampa", ln=True, align="C")
-    pdf.cell(190, 5, "WhatsApp: 5492302645333", ln=True, align="C")
-    
     return pdf.output(dest="S").encode("latin-1")
 
-# --- INTERFAZ CON PESTAÑAS ---
+# --- INTERFAZ ---
 tab1, tab2 = st.tabs(["📝 Crear Presupuesto", "📜 Historial"])
 
 with tab1:
     st.title("🔧 Taller Mecánico El Fer")
-
+    
     with st.container(border=True):
         st.subheader("👤 Datos del Cliente")
         cliente_nombre = st.text_input("Nombre completo", key="cli_nombre")
         vehiculo_info = st.text_input("Vehículo y Patente", key="cli_vehiculo")
-        tel_whatsapp = "5492302645333" # Tu WhatsApp por defecto o puedes hacerlo dinámico
+        tel_cliente = st.text_input("WhatsApp Cliente (Ej: 5492302...)", key="cli_tel")
 
     st.write("### 🛠️ Detalles del Trabajo")
     with st.form(key="formulario_carga", clear_on_submit=True):
-        desc = st.text_input("Descripción", key="temp_desc")
+        desc = st.text_input("Descripción")
         c1, c2 = st.columns(2)
-        cant = c1.number_input("Cantidad", min_value=1, value=1, key="temp_cant")
-        prec = c2.number_input("Precio Unitario ($)", min_value=0.0, step=100.0, key="temp_prec")
+        cant = c1.number_input("Cantidad", min_value=1, value=1)
+        prec = c2.number_input("Precio Unitario ($)", min_value=0.0, step=100.0)
         if st.form_submit_button("➕ Añadir"):
             if desc and prec > 0:
                 st.session_state.carrito.append({"Descripción": desc, "Cantidad": cant, "Precio Unit.": prec, "Subtotal": cant * prec})
@@ -127,7 +120,9 @@ with tab1:
             else:
                 try:
                     id_p = str(uuid.uuid4())[:8].upper()
-                    fecha_h = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # Fecha exacta Argentina
+                    tz = pytz.timezone('America/Argentina/Buenos_Aires')
+                    fecha_h = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
 
                     nuevo_res = pd.DataFrame([{"id_presupuesto":id_p,"cliente":cliente_nombre,"vehiculo":vehiculo_info,"fecha":fecha_h,"total":total_val}])
                     detalles_list = []
@@ -141,14 +136,14 @@ with tab1:
                     d_exist = conn.read(worksheet="Detalles")
                     conn.update(worksheet="Detalles", data=pd.concat([d_exist, df_det], ignore_index=True))
                     
-                    pdf_bytes = crear_pdf(cliente_nombre, vehiculo_info, st.session_state.carrito, total_val, id_p)
+                    pdf_bytes = crear_pdf(cliente_nombre, vehiculo_info, st.session_state.carrito, total_val, id_p, fecha_h)
                     st.success("✅ Guardado correctamente")
-                    st.download_button("📥 Descargar PDF Profesional", data=pdf_bytes, file_name=f"Presupuesto_{cliente_nombre}.pdf", mime="application/pdf")
+                    st.download_button("📥 Descargar PDF", data=pdf_bytes, file_name=f"Presupuesto_{cliente_nombre}.pdf", mime="application/pdf")
                     
-                    # WhatsApp para el cliente (Aviso)
-                    msg = f"Hola {cliente_nombre}, te envío el presupuesto de *Taller Mecánico El Fer*.\nTotal: ${total_val:,.2f}"
-                    ws_link = f"https://wa.me/{tel_whatsapp}?text={urllib.parse.quote(msg)}"
-                    st.link_button("📲 Notificar por WhatsApp", ws_link)
+                    if tel_cliente:
+                        msg = f"Hola {cliente_nombre}, te envío el presupuesto de *Taller Mecánico El Fer*.\nTotal: ${total_val:,.2f}"
+                        ws_link = f"https://wa.me/{tel_cliente}?text={urllib.parse.quote(msg)}"
+                        st.link_button("📲 Enviar a Cliente por WhatsApp", ws_link)
                     
                     st.session_state.carrito = []
                     st.cache_data.clear()
@@ -157,11 +152,10 @@ with tab1:
                     st.error(f"Error: {e}")
 
 with tab2:
-    st.title("📜 Historial de Trabajos")
+    st.title("📜 Historial")
     try:
         df_resumen = conn.read(worksheet="Resumen")
         df_detalles_all = conn.read(worksheet="Detalles")
-        
         busqueda = st.text_input("🔍 Buscar cliente o vehículo")
         
         df_filtrado = df_resumen.copy()
@@ -174,6 +168,6 @@ with tab2:
                 st.table(det[['descripcion', 'cantidad', 'precio', 'subtotal']])
                 
                 pdf_re = crear_pdf(row['cliente'], row['vehiculo'], det.to_dict('records'), row['total'], row['id_presupuesto'], row['fecha'])
-                st.download_button("🖨️ Reimprimir PDF", data=pdf_re, file_name=f"Reimpresion_{row['id_presupuesto']}.pdf", mime="application/pdf", key=f"re_{row['id_presupuesto']}")
+                st.download_button("🖨️ Reimprimir", data=pdf_re, file_name=f"Presupuesto_{row['id_presupuesto']}.pdf", mime="application/pdf", key=f"re_{row['id_presupuesto']}")
     except:
         st.info("Cargando historial...")
