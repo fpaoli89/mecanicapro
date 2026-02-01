@@ -6,57 +6,72 @@ import uuid
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Mecánica Pro", layout="wide")
-URL_SHEET = "TU_URL_DEL_NUEVO_EXCEL_AQUI"
+
+# IMPORTANTE: Cambia esto por tu URL real
+URL_SHEET = "https://docs.google.com/spreadsheets/d/TU_ID_AQUÍ/edit"
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- SESIÓN PARA ITEMS ---
+# --- INICIALIZAR SESSION STATE ---
 if 'carrito_repuestos' not in st.session_state:
     st.session_state.carrito_repuestos = []
 
 st.title("🔧 Mecánica Pro: Sistema de Presupuestos")
 
 # --- FORMULARIO DE CLIENTE ---
-with st.expander("👤 Datos del Cliente y Vehículo", expanded=True):
+with st.container(border=True):
+    st.subheader("👤 Datos del Cliente")
     c1, c2, c3 = st.columns(3)
     cliente = c1.text_input("Nombre del Cliente")
-    vehiculo = c2.text_input("Vehículo (Ej: Toyota Hilux)")
-    patente = c3.text_input("Patente / Placa")
+    vehiculo = c2.text_input("Vehículo")
+    patente = c3.text_input("Patente")
 
-# --- AGREGAR REPUESTOS O MANO DE OBRA ---
+# --- AGREGAR ITEMS ---
 st.subheader("🛠️ Detalles del Trabajo")
 with st.container(border=True):
     r1, r2, r3 = st.columns([3, 1, 1])
-    desc = r1.text_input("Descripción del repuesto o servicio")
+    desc = r1.text_input("Descripción (Repuesto o Servicio)")
     cant = r2.number_input("Cant.", min_value=1, value=1)
-    precio = r3.number_input("Precio Unitario", min_value=0.0)
+    precio = r3.number_input("Precio Unitario", min_value=0.0, step=100.0)
     
-    if st.button("➕ Agregar a la lista"):
+    if st.button("➕ Agregar Item"):
         if desc and precio > 0:
-            item = {
+            # Añadimos a la lista
+            nuevo_item = {
                 "descripcion": desc,
                 "cantidad": cant,
                 "precio": precio,
                 "subtotal": cant * precio
             }
-            st.session_state.carrito_repuestos.append(item)
+            st.session_state.carrito_repuestos.append(nuevo_item)
+            st.rerun() # Forzamos refresco limpio para evitar el error de Node
         else:
-            st.warning("Escribe una descripción y precio.")
+            st.warning("Escribe descripción y precio.")
 
-# --- MOSTRAR TABLA DE TRABAJO ---
+# --- LISTA DE TRABAJO ---
 if st.session_state.carrito_repuestos:
+    st.divider()
     df_items = pd.DataFrame(st.session_state.carrito_repuestos)
-    st.table(df_items)
     
-    total_general = df_items['subtotal'].sum()
-    st.subheader(f"Total: ${total_general:,.2f}")
+    # Usamos un contenedor dedicado para la tabla
+    with st.container():
+        st.table(df_items)
+        
+        total_general = df_items['subtotal'].sum()
+        st.header(f"Total: ${total_general:,.2f}")
 
-    if st.button("💾 GUARDAR PRESUPUESTO FINAL"):
-        id_unico = str(uuid.uuid4())[:8] # Genera un ID corto
+        col_save, col_clear = st.columns(2)
         
-        # 1. Guardar en Hoja Resumen (Simplificado por ahora)
-        st.success(f"Presupuesto {id_unico} guardado correctamente en la nube.")
-        
-        # Limpiar después de guardar
-        st.session_state.carrito_repuestos = []
-        # st.rerun() # Opcional para refrescar
+        if col_save.button("💾 GUARDAR PRESUPUESTO"):
+            # Aquí generamos el ID para vincular todo
+            id_presupuesto = str(uuid.uuid4())[:8].upper()
+            
+            # TODO: Lógica de guardado en Google Sheets (Hoja Resumen y Detalles)
+            
+            st.success(f"✅ Guardado como Presupuesto #{id_presupuesto}")
+            st.balloons()
+            # No limpiamos el carrito inmediatamente para que el usuario vea el éxito
+            
+        if col_clear.button("🗑️ Borrar Todo"):
+            st.session_state.carrito_repuestos = []
+            st.rerun()
