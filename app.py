@@ -8,22 +8,32 @@ import urllib.parse
 import pytz 
 
 # 1. Configuración de página
-st.set_page_config(page_title="Taller Mecánico El Fer", layout="centered", page_icon="🔧")
+st.set_page_config(page_title="Sistema de Presupuestos", layout="centered", page_icon="🔧")
 
 # 2. Conexión a Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. Inicializar el carrito en la sesión
-if 'carrito' not in st.session_state:
-    st.session_state.carrito = []
+# --- NUEVA FUNCIÓN: LEER DATOS DEL TALLER ---
+def obtener_datos_taller():
+    try:
+        df_conf = conn.read(worksheet="Configuracion")
+        # Retorna la primera fila como un diccionario
+        return df_conf.iloc[0].to_dict()
+    except Exception:
+        # Datos de respaldo por si la pestaña no existe aún
+        return {
+            "nombre_taller": "TALLER MECÁNICO",
+            "direccion": "Dirección no configurada",
+            "telefono": "0000000000",
+            "leyenda_presupuesto": "Presupuesto válido por 7 días"
+        }
 
-# --- FUNCIÓN DE PDF CORREGIDA ---
-def crear_pdf(cliente, vehiculo, items, total, id_p, fecha_str=None):
+# --- FUNCIÓN DE PDF DINÁMICA ---
+def crear_pdf(cliente, vehiculo, items, total, id_p, info_taller, fecha_str=None):
     if fecha_str is None:
         tz = pytz.timezone('America/Argentina/Buenos_Aires')
         fecha_str = datetime.now(tz).strftime('%d/%m/%Y %H:%M')
     
-    # Creamos el PDF con márgenes controlados
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -35,14 +45,16 @@ def crear_pdf(cliente, vehiculo, items, total, id_p, fecha_str=None):
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Arial", "B", 22)
     pdf.set_y(10)
-    pdf.cell(190, 10, "TALLER MECÁNICO EL FER", ln=True, align="L")
+    # NOMBRE DINÁMICO
+    pdf.cell(190, 10, str(info_taller['nombre_taller']).upper(), ln=True, align="L")
     
     pdf.set_font("Arial", "", 10)
-    pdf.cell(190, 5, "Dirección: 18 n° 960, Gral. Pico, La Pampa", ln=True, align="L")
-    pdf.cell(190, 5, "WhatsApp: 5492302645333", ln=True, align="L")
+    # DIRECCIÓN Y TELÉFONO DINÁMICOS
+    pdf.cell(190, 5, f"Dirección: {info_taller['direccion']}", ln=True, align="L")
+    pdf.cell(190, 5, f"WhatsApp: {info_taller['telefono']}", ln=True, align="L")
     pdf.cell(190, 5, f"Presupuesto N°: {id_p} | Fecha: {fecha_str}", ln=True, align="L")
     
-    pdf.set_y(60) # Bajamos el cursor después del encabezado
+    pdf.set_y(60) 
     
     # --- DATOS DEL CLIENTE ---
     pdf.set_text_color(0, 0, 0)
@@ -85,19 +97,28 @@ def crear_pdf(cliente, vehiculo, items, total, id_p, fecha_str=None):
     pdf.cell(155, 10, "TOTAL FINAL ", 0, 0, "R", True)
     pdf.cell(35, 10, f"${float(total):,.2f} ", 0, 1, "R", True)
 
-    # --- LEYENDA PIE DE PÁGINA (Posición fija al final de la hoja 1) ---
-    pdf.set_y(265) # Ubica la leyenda cerca del final sin saltar de página
+    # --- LEYENDA PIE DE PÁGINA DINÁMICA ---
+    pdf.set_y(265) 
     pdf.set_text_color(100, 100, 100)
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(190, 10, "Presupuesto válido por 7 días", 0, 0, "C")
+    pdf.cell(190, 10, str(info_taller['leyenda_presupuesto']), 0, 0, "C")
     
     return pdf.output(dest="S").encode("latin-1")
 
-# --- INTERFAZ STREAMLIT ---
+# --- INICIO DE LA APLICACIÓN ---
+
+# Cargar configuración del taller
+info_taller = obtener_datos_taller()
+
+# Inicializar carrito
+if 'carrito' not in st.session_state:
+    st.session_state.carrito = []
+
 tab1, tab2 = st.tabs(["📝 Crear Presupuesto", "📜 Historial"])
 
 with tab1:
-    st.title("🔧 Taller Mecánico El Fer")
+    # TÍTULO DINÁMICO EN LA WEB
+    st.title(f"🔧 {info_taller['nombre_taller']}")
     
     with st.container(border=True):
         st.subheader("👤 Datos del Cliente")
@@ -141,12 +162,13 @@ with tab1:
                     d_exist = conn.read(worksheet="Detalles")
                     conn.update(worksheet="Detalles", data=pd.concat([d_exist, df_det], ignore_index=True))
                     
-                    pdf_bytes = crear_pdf(cliente_nombre, vehiculo_info, st.session_state.carrito, total_val, id_p, fecha_h)
+                    # LLAMADA AL PDF PASANDO INFO_TALLER
+                    pdf_bytes = crear_pdf(cliente_nombre, vehiculo_info, st.session_state.carrito, total_val, id_p, info_taller, fecha_h)
                     st.success("✅ Guardado correctamente")
                     st.download_button("📥 Descargar PDF", data=pdf_bytes, file_name=f"Presupuesto_{cliente_nombre}.pdf", mime="application/pdf")
                     
                     if tel_cliente:
-                        msg = f"Hola {cliente_nombre}, te envío el presupuesto de *Taller Mecánico El Fer*.\nTotal: ${total_val:,.2f}"
+                        msg = f"Hola {cliente_nombre}, te envío el presupuesto de *{info_taller['nombre_taller']}*.\nTotal: ${total_val:,.2f}"
                         ws_link = f"https://wa.me/{tel_cliente}?text={urllib.parse.quote(msg)}"
                         st.link_button("📲 Enviar a Cliente por WhatsApp", ws_link)
                     
@@ -172,7 +194,8 @@ with tab2:
                 det = df_detalles_all[df_detalles_all['id_presupuesto'] == row['id_presupuesto']]
                 st.table(det[['descripcion', 'cantidad', 'precio', 'subtotal']])
                 
-                pdf_re = crear_pdf(row['cliente'], row['vehiculo'], det.to_dict('records'), row['total'], row['id_presupuesto'], row['fecha'])
+                # REIMPRESIÓN PASANDO INFO_TALLER
+                pdf_re = crear_pdf(row['cliente'], row['vehiculo'], det.to_dict('records'), row['total'], row['id_presupuesto'], info_taller, row['fecha'])
                 st.download_button("🖨️ Reimprimir", data=pdf_re, file_name=f"Presupuesto_{row['id_presupuesto']}.pdf", mime="application/pdf", key=f"re_{row['id_presupuesto']}")
     except:
         st.info("Cargando historial...")
