@@ -17,80 +17,83 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 if 'carrito' not in st.session_state:
     st.session_state.carrito = []
 
-# --- FUNCIÓN DE PDF ---
+# --- FUNCIÓN DE PDF CORREGIDA ---
 def crear_pdf(cliente, vehiculo, items, total, id_p, fecha_str=None):
     if fecha_str is None:
         tz = pytz.timezone('America/Argentina/Buenos_Aires')
         fecha_str = datetime.now(tz).strftime('%d/%m/%Y %H:%M')
     
+    # Creamos el PDF con márgenes controlados
     pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
     # --- ENCABEZADO ---
     pdf.set_fill_color(30, 60, 120) 
-    pdf.rect(0, 0, 210, 55, 'F')
+    pdf.rect(0, 0, 210, 50, 'F')
     
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Arial", "B", 22)
-    pdf.cell(190, 12, "TALLER MECÁNICO EL FER", ln=True, align="L")
+    pdf.set_y(10)
+    pdf.cell(190, 10, "TALLER MECÁNICO EL FER", ln=True, align="L")
     
     pdf.set_font("Arial", "", 10)
     pdf.cell(190, 5, "Dirección: 18 n° 960, Gral. Pico, La Pampa", ln=True, align="L")
     pdf.cell(190, 5, "WhatsApp: 5492302645333", ln=True, align="L")
     pdf.cell(190, 5, f"Presupuesto N°: {id_p} | Fecha: {fecha_str}", ln=True, align="L")
     
-    pdf.ln(28) 
+    pdf.set_y(60) # Bajamos el cursor después del encabezado
     
     # --- DATOS DEL CLIENTE ---
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(190, 10, "DETALLES DEL CLIENTE Y VEHÍCULO", ln=True)
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(190, 8, "DETALLES DEL CLIENTE Y VEHÍCULO", ln=True)
     pdf.set_draw_color(30, 60, 120)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(3)
+    pdf.ln(2)
     
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(95, 8, f"Cliente: {cliente}", 0)
-    pdf.cell(95, 8, f"Vehículo / Patente: {vehiculo}", ln=True)
-    pdf.ln(8)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(95, 7, f"Cliente: {cliente}", 0)
+    pdf.cell(95, 7, f"Vehículo / Patente: {vehiculo}", ln=True)
+    pdf.ln(5)
     
     # --- TABLA DE ITEMS ---
     pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(100, 10, " Descripción", 1, 0, "L", True)
-    pdf.cell(20, 10, "Cant.", 1, 0, "C", True)
-    pdf.cell(35, 10, "Precio U.", 1, 0, "C", True)
-    pdf.cell(35, 10, "Subtotal", 1, 1, "C", True)
+    pdf.set_font("Arial", "B", 9)
+    pdf.cell(100, 8, " Descripción", 1, 0, "L", True)
+    pdf.cell(20, 8, "Cant.", 1, 0, "C", True)
+    pdf.cell(35, 8, "Precio U.", 1, 0, "C", True)
+    pdf.cell(35, 8, "Subtotal", 1, 1, "C", True)
     
-    pdf.set_font("Arial", "", 10)
+    pdf.set_font("Arial", "", 9)
     for i in items:
         desc = i.get("Descripción") or i.get("descripcion")
         cant = i.get("Cantidad") or i.get("cantidad")
         prec = i.get("Precio Unit.") or i.get("precio")
         subt = i.get("Subtotal") or i.get("subtotal")
         
-        pdf.cell(100, 10, f" {desc}", 1)
-        pdf.cell(20, 10, str(cant), 1, 0, "C")
-        pdf.cell(35, 10, f"${float(prec):,.2f}", 1, 0, "R")
-        pdf.cell(35, 10, f"${float(subt):,.2f}", 1, 1, "R")
+        pdf.cell(100, 8, f" {desc}", 1)
+        pdf.cell(20, 8, str(cant), 1, 0, "C")
+        pdf.cell(35, 8, f"${float(prec):,.2f}", 1, 0, "R")
+        pdf.cell(35, 8, f"${float(subt):,.2f}", 1, 1, "R")
     
     # --- TOTAL ---
-    pdf.ln(5)
-    pdf.set_font("Arial", "B", 14)
+    pdf.ln(3)
+    pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(30, 60, 120)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(155, 12, "TOTAL FINAL ", 0, 0, "R", True)
-    pdf.cell(35, 12, f"${float(total):,.2f} ", 0, 1, "R", True)
+    pdf.cell(155, 10, "TOTAL FINAL ", 0, 0, "R", True)
+    pdf.cell(35, 10, f"${float(total):,.2f} ", 0, 1, "R", True)
 
-    # --- LEYENDA PIE DE PÁGINA ---
-    pdf.set_y(-25)
+    # --- LEYENDA PIE DE PÁGINA (Posición fija al final de la hoja 1) ---
+    pdf.set_y(265) # Ubica la leyenda cerca del final sin saltar de página
     pdf.set_text_color(100, 100, 100)
     pdf.set_font("Arial", "B", 10)
     pdf.cell(190, 10, "Presupuesto válido por 7 días", 0, 0, "C")
     
     return pdf.output(dest="S").encode("latin-1")
 
-# --- INTERFAZ ---
+# --- INTERFAZ STREAMLIT ---
 tab1, tab2 = st.tabs(["📝 Crear Presupuesto", "📜 Historial"])
 
 with tab1:
