@@ -35,7 +35,7 @@ def limpiar_todo():
 
 # --- INTERFAZ DE USUARIO ---
 st.title("🔧 Mecánica Pro")
-st.write("Gestión de Presupuestos")
+st.write("Sistema de Gestión de Presupuestos")
 
 # Sección 1: Datos del Cliente
 with st.container(border=True):
@@ -51,12 +51,13 @@ with st.form(key="formulario_carga", clear_on_submit=True):
     c1.number_input("Cantidad", min_value=1, value=1, key="temp_cant")
     c2.number_input("Precio Unitario ($)", min_value=0.0, step=100.0, key="temp_prec")
     
-    submit = st.form_submit_button("➕ Añadir a la lista", on_click=agregar_item)
+    if st.form_submit_button("➕ Añadir a la lista"):
+        agregar_item()
 
 # Sección 3: Resumen y Guardado
 if st.session_state.carrito:
     st.divider()
-    st.subheader("📋 Resumen")
+    st.subheader("📋 Resumen del Presupuesto")
     
     df_carrito = pd.DataFrame(st.session_state.carrito)
     st.table(df_carrito)
@@ -68,14 +69,14 @@ if st.session_state.carrito:
     
     if col_save.button("💾 GUARDAR EN SISTEMA", use_container_width=True):
         if not st.session_state.cli_nombre or not st.session_state.cli_vehiculo:
-            st.error("❌ Completa los datos del cliente y vehículo.")
+            st.error("❌ Por favor completa los datos del cliente y vehículo.")
         else:
             try:
                 # Generar ID y Fecha
                 id_p = str(uuid.uuid4())[:8].upper()
                 fecha_h = datetime.now().strftime("%Y-%m-%d %H:%M")
                 
-                # Preparar datos
+                # Preparar datos para 'Resumen'
                 nuevo_resumen = pd.DataFrame([{
                     "id_presupuesto": id_p,
                     "cliente": st.session_state.cli_nombre,
@@ -84,6 +85,7 @@ if st.session_state.carrito:
                     "total": total
                 }])
                 
+                # Preparar datos para 'Detalles'
                 detalles_list = []
                 for item in st.session_state.carrito:
                     detalles_list.append({
@@ -94,25 +96,31 @@ if st.session_state.carrito:
                         "subtotal": item["Subtotal"]
                     })
                 df_detalles = pd.DataFrame(detalles_list)
+
+                # --- PROCESO DE GUARDADO REFORZADO ---
+                # Guardar en pestaña 'Resumen'
+                try:
+                    res_existente = conn.read(worksheet="Resumen")
+                    res_final = pd.concat([res_existente, nuevo_resumen], ignore_index=True)
+                    conn.update(worksheet="Resumen", data=res_final)
+                except:
+                    conn.create(worksheet="Resumen", data=nuevo_resumen)
+
+                # Guardar en pestaña 'Detalles'
+                try:
+                    det_existente = conn.read(worksheet="Detalles")
+                    det_final = pd.concat([det_existente, df_detalles], ignore_index=True)
+                    conn.update(worksheet="Detalles", data=det_final)
+                except:
+                    conn.create(worksheet="Detalles", data=df_detalles)
                 
-                # --- PROCESO DE GUARDADO ---
-                # Guardar Resumen
-                existing_resumen = conn.read(worksheet="Resumen")
-                resumen_final = pd.concat([existing_resumen, nuevo_resumen], ignore_index=True)
-                conn.update(worksheet="Resumen", data=resumen_final)
-                
-                # Guardar Detalles
-                existing_detalles = conn.read(worksheet="Detalles")
-                detalles_final = pd.concat([existing_detalles, df_detalles], ignore_index=True)
-                conn.update(worksheet="Detalles", data=detalles_final)
-                
-                st.success(f"✅ Presupuesto #{id_p} guardado correctamente")
+                st.success(f"✅ ¡Presupuesto #{id_p} guardado con éxito!")
                 st.balloons()
-                st.session_state.carrito = [] # Limpiar lista tras guardar
+                st.session_state.carrito = [] # Limpiar carrito tras éxito
                 
             except Exception as e:
-                st.error(f"Error al guardar: {e}")
-                st.info("Asegúrate de que las pestañas 'Resumen' y 'Detalles' tengan sus encabezados en la fila 1.")
+                st.error(f"Hubo un problema de conexión: {e}")
+                st.info("💡 Consejo: Asegúrate de que el correo del Service Account sea EDITOR en tu Google Sheets.")
 
     if col_clear.button("🗑️ VACIAR TODO", use_container_width=True):
         limpiar_todo()
