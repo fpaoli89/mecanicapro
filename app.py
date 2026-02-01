@@ -8,7 +8,6 @@ import uuid
 st.set_page_config(page_title="Mecánica Pro", layout="centered", page_icon="🔧")
 
 # 2. Conexión a Google Sheets
-# Asegúrate de tener configurada la URL en tus Secrets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 3. Inicializar el carrito en la sesión
@@ -36,13 +35,13 @@ def limpiar_todo():
 
 # --- INTERFAZ DE USUARIO ---
 st.title("🔧 Mecánica Pro")
-st.write("Sistema de Gestión de Presupuestos")
+st.write("Gestión de Presupuestos")
 
 # Sección 1: Datos del Cliente
 with st.container(border=True):
     st.subheader("👤 Datos del Cliente")
-    cliente = st.text_input("Nombre completo", key="cli_nombre")
-    vehiculo = st.text_input("Vehículo (Marca, Modelo, Patente)", key="cli_vehiculo")
+    st.text_input("Nombre completo", key="cli_nombre")
+    st.text_input("Vehículo y Patente", key="cli_vehiculo")
 
 # Sección 2: Carga de Trabajos
 st.write("### 🛠️ Detalles del Trabajo")
@@ -57,11 +56,10 @@ with st.form(key="formulario_carga", clear_on_submit=True):
 # Sección 3: Resumen y Guardado
 if st.session_state.carrito:
     st.divider()
-    st.subheader("📋 Resumen del Presupuesto")
+    st.subheader("📋 Resumen")
     
     df_carrito = pd.DataFrame(st.session_state.carrito)
-    # Usamos write para máxima estabilidad
-    st.write(df_carrito)
+    st.table(df_carrito)
     
     total = df_carrito["Subtotal"].sum()
     st.markdown(f"## TOTAL: ${total:,.2f}")
@@ -69,28 +67,27 @@ if st.session_state.carrito:
     col_save, col_clear = st.columns(2)
     
     if col_save.button("💾 GUARDAR EN SISTEMA", use_container_width=True):
-        if not cliente or not vehiculo:
-            st.error("Por favor completa los datos del cliente y vehículo.")
+        if not st.session_state.cli_nombre or not st.session_state.cli_vehiculo:
+            st.error("❌ Completa los datos del cliente y vehículo.")
         else:
             try:
-                # Generar un ID único para este presupuesto
-                id_presupuesto = str(uuid.uuid4())[:8].upper()
-                fecha_hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+                # Generar ID y Fecha
+                id_p = str(uuid.uuid4())[:8].upper()
+                fecha_h = datetime.now().strftime("%Y-%m-%d %H:%M")
                 
-                # 1. Preparar datos para la hoja 'Resumen'
+                # Preparar datos
                 nuevo_resumen = pd.DataFrame([{
-                    "id_presupuesto": id_presupuesto,
-                    "cliente": cliente,
-                    "vehiculo": vehiculo,
-                    "fecha": fecha_hoy,
+                    "id_presupuesto": id_p,
+                    "cliente": st.session_state.cli_nombre,
+                    "vehiculo": st.session_state.cli_vehiculo,
+                    "fecha": fecha_h,
                     "total": total
                 }])
                 
-                # 2. Preparar datos para la hoja 'Detalles'
                 detalles_list = []
                 for item in st.session_state.carrito:
                     detalles_list.append({
-                        "id_presupuesto": id_presupuesto,
+                        "id_presupuesto": id_p,
                         "descripcion": item["Descripción"],
                         "cantidad": item["Cantidad"],
                         "precio": item["Precio Unit."],
@@ -98,24 +95,25 @@ if st.session_state.carrito:
                     })
                 df_detalles = pd.DataFrame(detalles_list)
                 
-                # 3. Guardar en Google Sheets (Versión forzada)
-                # Primero leemos lo que ya hay (si existe) para no romper la estructura
-                try:
-                    existing_resumen = conn.read(worksheet="Resumen")
-                    updated_resumen = pd.concat([existing_resumen, nuevo_resumen], ignore_index=True)
-                    conn.update(worksheet="Resumen", data=updated_resumen)
-                except:
-                    # Si falla la lectura, intentamos crearla de cero
-                    conn.create(worksheet="Resumen", data=nuevo_resumen)
-
-                try:
-                    existing_detalles = conn.read(worksheet="Detalles")
-                    updated_detalles = pd.concat([existing_detalles, df_detalles], ignore_index=True)
-                    conn.update(worksheet="Detalles", data=updated_detalles)
-                except:
-                    conn.create(worksheet="Detalles", data=df_detalles)
+                # --- PROCESO DE GUARDADO ---
+                # Guardar Resumen
+                existing_resumen = conn.read(worksheet="Resumen")
+                resumen_final = pd.concat([existing_resumen, nuevo_resumen], ignore_index=True)
+                conn.update(worksheet="Resumen", data=resumen_final)
+                
+                # Guardar Detalles
+                existing_detalles = conn.read(worksheet="Detalles")
+                detalles_final = pd.concat([existing_detalles, df_detalles], ignore_index=True)
+                conn.update(worksheet="Detalles", data=detalles_final)
+                
+                st.success(f"✅ Presupuesto #{id_p} guardado correctamente")
+                st.balloons()
+                st.session_state.carrito = [] # Limpiar lista tras guardar
+                
+            except Exception as e:
+                st.error(f"Error al guardar: {e}")
+                st.info("Asegúrate de que las pestañas 'Resumen' y 'Detalles' tengan sus encabezados en la fila 1.")
 
     if col_clear.button("🗑️ VACIAR TODO", use_container_width=True):
         limpiar_todo()
         st.rerun()
-
