@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 from fpdf import FPDF
 import urllib.parse
-import pytz # Para la hora exacta de Argentina
+import pytz 
 
 # 1. Configuración de página
 st.set_page_config(page_title="Taller Mecánico El Fer", layout="centered", page_icon="🔧")
@@ -17,9 +17,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 if 'carrito' not in st.session_state:
     st.session_state.carrito = []
 
-# --- FUNCIÓN DE PDF MEJORADA ---
+# --- FUNCIÓN DE PDF ---
 def crear_pdf(cliente, vehiculo, items, total, id_p, fecha_str=None):
-    # Si no hay fecha (nuevo presupuesto), usamos la actual de Argentina
     if fecha_str is None:
         tz = pytz.timezone('America/Argentina/Buenos_Aires')
         fecha_str = datetime.now(tz).strftime('%d/%m/%Y %H:%M')
@@ -32,16 +31,15 @@ def crear_pdf(cliente, vehiculo, items, total, id_p, fecha_str=None):
     pdf.rect(0, 0, 210, 55, 'F')
     
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Arial", "B", 24)
-    pdf.cell(190, 15, "TALLER MECÁNICO EL FER", ln=True, align="L")
+    pdf.set_font("Arial", "B", 22)
+    pdf.cell(190, 12, "TALLER MECÁNICO EL FER", ln=True, align="L")
     
-    # Datos bajo el título
     pdf.set_font("Arial", "", 10)
     pdf.cell(190, 5, "Dirección: 18 n° 960, Gral. Pico, La Pampa", ln=True, align="L")
     pdf.cell(190, 5, "WhatsApp: 5492302645333", ln=True, align="L")
     pdf.cell(190, 5, f"Presupuesto N°: {id_p} | Fecha: {fecha_str}", ln=True, align="L")
     
-    pdf.ln(25) # Salto para el cuerpo del PDF
+    pdf.ln(28) 
     
     # --- DATOS DEL CLIENTE ---
     pdf.set_text_color(0, 0, 0)
@@ -83,6 +81,12 @@ def crear_pdf(cliente, vehiculo, items, total, id_p, fecha_str=None):
     pdf.set_text_color(255, 255, 255)
     pdf.cell(155, 12, "TOTAL FINAL ", 0, 0, "R", True)
     pdf.cell(35, 12, f"${float(total):,.2f} ", 0, 1, "R", True)
+
+    # --- LEYENDA PIE DE PÁGINA ---
+    pdf.set_y(-25)
+    pdf.set_text_color(100, 100, 100)
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(190, 10, "Presupuesto válido por 7 días", 0, 0, "C")
     
     return pdf.output(dest="S").encode("latin-1")
 
@@ -120,7 +124,6 @@ with tab1:
             else:
                 try:
                     id_p = str(uuid.uuid4())[:8].upper()
-                    # Fecha exacta Argentina
                     tz = pytz.timezone('America/Argentina/Buenos_Aires')
                     fecha_h = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
 
@@ -130,7 +133,6 @@ with tab1:
                         detalles_list.append({"id_presupuesto":id_p,"descripcion":item["Descripción"],"cantidad":item["Cantidad"],"precio":item["Precio Unit."],"subtotal":item["Subtotal"]})
                     df_det = pd.DataFrame(detalles_list)
 
-                    # Guardado en GSheets
                     r_exist = conn.read(worksheet="Resumen")
                     conn.update(worksheet="Resumen", data=pd.concat([r_exist, nuevo_res], ignore_index=True))
                     d_exist = conn.read(worksheet="Detalles")
