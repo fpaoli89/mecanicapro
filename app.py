@@ -32,19 +32,24 @@ def validar_usuario(user, pw):
         st.error(f"Error en Usuarios: {e}")
         return None
 
-# --- FUNCIÓN DE PDF ---
+# --- FUNCIÓN DE PDF (ACTUALIZADA A NEGRO Y ROJO) ---
 def crear_pdf(cliente_info, vehiculo, items, total, id_p, info_taller, fecha_str):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
-    pdf.set_fill_color(30, 60, 120) 
+    # Encabezado: Fondo Negro
+    pdf.set_fill_color(0, 0, 0) 
     pdf.rect(0, 0, 210, 65, 'F')
     pdf.set_text_color(255, 255, 255)
     
     pdf.set_font("Arial", "B", 22)
     pdf.set_y(10)
+    # Nombre del Taller en Rojo (dentro del fondo negro)
+    pdf.set_text_color(220, 20, 60) # Rojo intenso
     pdf.cell(190, 10, str(info_taller.get('nombre_taller', 'Taller')).upper(), ln=True, align="L")
+    
+    pdf.set_text_color(255, 255, 255) # Blanco para el resto
     pdf.set_font("Arial", "B", 12)
     pdf.cell(190, 6, str(info_taller.get('rubro', 'Servicios')), ln=True, align="L")
     pdf.set_font("Arial", "", 10)
@@ -52,9 +57,10 @@ def crear_pdf(cliente_info, vehiculo, items, total, id_p, info_taller, fecha_str
     pdf.cell(190, 5, f"Dirección: {info_taller.get('direccion', '')} | Tel: {info_taller.get('telefono', '')}", ln=True, align="L")
     pdf.cell(190, 5, f"Presupuesto N°: {id_p} | Fecha: {fecha_str}", ln=True, align="L")
     
+    # Cuerpo: Textos en Negro
     pdf.set_y(75); pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "B", 11)
     pdf.cell(190, 8, "DATOS DEL CLIENTE Y TRABAJO", ln=True)
-    pdf.set_draw_color(30, 60, 120); pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(2)
+    pdf.set_draw_color(220, 20, 60); pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(2)
     
     pdf.set_font("Arial", "", 10)
     pdf.cell(95, 6, f"Cliente: {cliente_info['nombre']}", 0)
@@ -62,13 +68,15 @@ def crear_pdf(cliente_info, vehiculo, items, total, id_p, info_taller, fecha_str
     pdf.cell(95, 6, f"Domicilio: {cliente_info['domicilio']}", 0)
     pdf.cell(95, 6, f"Localidad: {cliente_info['localidad']}", ln=True); pdf.ln(5)
     
-    pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 9)
+    # Tabla: Encabezado Rojo
+    pdf.set_fill_color(220, 20, 60); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 9)
     pdf.cell(100, 8, " Descripción", 1, 0, "L", True)
     pdf.cell(20, 8, "Cant.", 1, 0, "C", True)
     pdf.cell(35, 8, "Precio U.", 1, 0, "C", True)
     pdf.cell(35, 8, "Subtotal", 1, 1, "C", True)
     
-    pdf.set_font("Arial", "", 9)
+    # Filas
+    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
     for i in items:
         pdf.cell(100, 8, f" {i['Descripción'] if 'Descripción' in i else i['descripcion']}", 1)
         pdf.cell(20, 8, str(i['Cantidad'] if 'Cantidad' in i else i['cantidad']), 1, 0, "C")
@@ -76,7 +84,8 @@ def crear_pdf(cliente_info, vehiculo, items, total, id_p, info_taller, fecha_str
         pdf.cell(35, 8, f"${float(i['Subtotal'] if 'Subtotal' in i else i['subtotal']):,.2f}", 1, 1, "R")
 
     pdf.ln(3)
-    pdf.set_font("Arial", "B", 12); pdf.set_fill_color(30, 60, 120); pdf.set_text_color(255, 255, 255)
+    # Total en Negro
+    pdf.set_font("Arial", "B", 12); pdf.set_fill_color(0, 0, 0); pdf.set_text_color(255, 255, 255)
     pdf.cell(155, 10, "TOTAL FINAL ", 0, 0, "R", True)
     pdf.cell(35, 10, f"${float(total):,.2f} ", 0, 1, "R", True)
     
@@ -99,6 +108,11 @@ else:
     taller = st.session_state.auth
     st.sidebar.title(f"🔧 {taller['nombre_taller']}")
     if st.sidebar.button("Cerrar Sesión"): st.session_state.auth = None; st.rerun()
+    
+    # Firma en Sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.caption("FAPSOFTWARE - versión 1.0")
+    st.sidebar.caption("by Fernando Paoli")
 
     if 'carrito' not in st.session_state: st.session_state.carrito = []
 
@@ -207,7 +221,7 @@ else:
                 st.success("Precios actualizados"); st.cache_data.clear()
         except: st.info("Carga items en Stock.")
 
-    # --- TAB 4: HISTORIAL (CON RE-IMPRESIÓN) ---
+    # --- TAB 4: HISTORIAL ---
     with tabs[3]:
         st.subheader("Consulta e Impresión")
         try:
@@ -232,7 +246,6 @@ else:
                     st.write(f"**Vehículo:** {row['vehiculo']}")
                     st.table(items_presu[['descripcion', 'cantidad', 'precio', 'subtotal']])
                     
-                    # Lógica para re-obtener domicilio/localidad al reimprimir
                     info_c_re = df_c_info[df_c_info['nombre'] == row['cliente']]
                     c_re_data = {
                         "nombre": row['cliente'],
@@ -243,3 +256,7 @@ else:
                     pdf_re = crear_pdf(c_re_data, row['vehiculo'], items_presu.to_dict('records'), row['total'], row['id_presupuesto'], taller, row['fecha'])
                     st.download_button("📥 Volver a descargar PDF", pdf_re, f"Re_Presu_{row['id_presupuesto']}.pdf", key=f"re_{row['id_presupuesto']}")
         except: st.info("No hay registros que coincidan.")
+
+    # Pie de página decorativo
+    st.write("---")
+    st.caption("FAPSOFTWARE - versión 1.0 - by Fernando Paoli")
