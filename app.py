@@ -34,34 +34,39 @@ def validar_usuario(user, pw):
         st.error(f"Error en Usuarios: {e}")
         return None
 
-# --- FUNCIÓN DE PDF ---
-def crear_pdf(cliente, vehiculo, items, total, id_p, info, fecha_str):
+# --- FUNCIÓN DE PDF (CON DATOS EXTRA DE CLIENTE) ---
+def crear_pdf(cliente_info, vehiculo, items, total, id_p, info_taller, fecha_str):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
+    # Encabezado Estilo Taller
     pdf.set_fill_color(30, 60, 120) 
     pdf.rect(0, 0, 210, 65, 'F')
     pdf.set_text_color(255, 255, 255)
     
     pdf.set_font("Arial", "B", 22)
     pdf.set_y(10)
-    pdf.cell(190, 10, str(info.get('nombre_taller', 'Taller')).upper(), ln=True, align="L")
+    pdf.cell(190, 10, str(info_taller.get('nombre_taller', 'Taller')).upper(), ln=True, align="L")
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(190, 6, str(info.get('rubro', '')), ln=True, align="L")
+    pdf.cell(190, 6, str(info_taller.get('rubro', '')), ln=True, align="L")
     pdf.set_font("Arial", "", 10)
-    pdf.cell(190, 5, f"Email: {info.get('email', '')}", ln=True, align="L")
-    pdf.cell(190, 5, f"Dirección: {info.get('direccion', '')} | Tel: {info.get('telefono', '')}", ln=True, align="L")
+    pdf.cell(190, 5, f"Email: {info_taller.get('email', '')}", ln=True, align="L")
+    pdf.cell(190, 5, f"Dirección: {info_taller.get('direccion', '')} | Tel: {info_taller.get('telefono', '')}", ln=True, align="L")
     pdf.cell(190, 5, f"Presupuesto N°: {id_p} | Fecha: {fecha_str}", ln=True, align="L")
     
     pdf.set_y(75); pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "B", 11)
-    pdf.cell(190, 8, "DETALLES DEL TRABAJO", ln=True)
+    pdf.cell(190, 8, "DATOS DEL CLIENTE Y TRABAJO", ln=True)
     pdf.set_draw_color(30, 60, 120); pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(2)
     
     pdf.set_font("Arial", "", 10)
-    pdf.cell(95, 7, f"Cliente: {cliente}", 0)
-    pdf.cell(95, 7, f"Vehículo: {vehiculo}", ln=True); pdf.ln(5)
+    # Bloque de Cliente
+    pdf.cell(95, 6, f"Cliente: {cliente_info['nombre']}", 0)
+    pdf.cell(95, 6, f"Vehículo: {vehiculo}", ln=True)
+    pdf.cell(95, 6, f"Domicilio: {cliente_info['domicilio']}", 0)
+    pdf.cell(95, 6, f"Localidad: {cliente_info['localidad']}", ln=True); pdf.ln(5)
     
+    # Tabla de items
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 9)
     pdf.cell(100, 8, " Descripción", 1, 0, "L", True)
     pdf.cell(20, 8, "Cant.", 1, 0, "C", True)
@@ -81,14 +86,14 @@ def crear_pdf(cliente, vehiculo, items, total, id_p, info, fecha_str):
     pdf.cell(35, 10, f"${float(total):,.2f} ", 0, 1, "R", True)
     
     pdf.set_y(265); pdf.set_text_color(100, 100, 100); pdf.set_font("Arial", "B", 10)
-    pdf.cell(190, 10, str(info.get('leyenda', '')), 0, 0, "C")
+    pdf.cell(190, 10, str(info_taller.get('leyenda', '')), 0, 0, "C")
     return pdf.output(dest="S").encode("latin-1")
 
 # --- LOGIN ---
 if 'auth' not in st.session_state: st.session_state.auth = None
 
 if st.session_state.auth is None:
-    st.title("🔐 Acceso")
+    st.title("🔐 Acceso Sistema Taller")
     with st.form("login"):
         u, p = st.text_input("Usuario"), st.text_input("Contraseña", type="password")
         if st.form_submit_button("Ingresar"):
@@ -102,7 +107,7 @@ else:
 
     if 'carrito' not in st.session_state: st.session_state.carrito = []
 
-    tabs = st.tabs(["📝 Presupuesto", "👥 Clientes", "📦 Stock/Precios", "📜 Historial"])
+    tabs = st.tabs(["📝 Presupuesto", "👥 Clientes", "📦 Stock", "📜 Historial"])
 
     # --- TAB 1: PRESUPUESTADOR ---
     with tabs[0]:
@@ -114,16 +119,22 @@ else:
 
         c1, c2 = st.columns(2)
         sel_c = c1.selectbox("Cliente:", ["-- Buscar --"] + lista_cli)
-        tel_sug, cli_f = "", ""
+        
+        # Diccionario para guardar datos del cliente seleccionado
+        cli_data = {"nombre": "", "telefono": "", "domicilio": "", "localidad": ""}
+        
         if sel_c != "-- Buscar --":
-            cli_f = sel_c
             row_c = df_cli_raw[df_cli_raw['nombre'] == sel_c].iloc[0]
+            cli_data['nombre'] = sel_c
             t_r = str(row_c['telefono'])
-            tel_sug = t_r[:-2] if t_r.endswith('.0') else t_r
-        else: cli_f = c1.text_input("Nombre Manual")
+            cli_data['telefono'] = t_r[:-2] if t_r.endswith('.0') else t_r
+            cli_data['domicilio'] = str(row_c.get('domicilio', ''))
+            cli_data['localidad'] = str(row_c.get('localidad', ''))
+        else:
+            cli_data['nombre'] = c1.text_input("Nombre Manual")
 
         vehi = c2.text_input("Vehículo / Patente")
-        tel_w = st.text_input("WhatsApp Cliente", value=tel_sug)
+        tel_w = st.text_input("WhatsApp Cliente", value=cli_data['telefono'])
 
         st.write("---")
         try:
@@ -132,12 +143,12 @@ else:
         except: lista_pre = []
 
         col_b, col_c, col_p = st.columns([3, 1, 1])
-        op_p = col_b.selectbox("Repuesto/Servicio:", ["-- Manual --"] + lista_pre)
+        op_p = col_b.selectbox("Elegir Item:", ["-- Manual --"] + lista_pre)
         p_sug, desc_f = 0.0, ""
         if op_p != "-- Manual --":
             desc_f = op_p
             p_sug = float(df_pre_raw[df_pre_raw['item'] == op_p]['precio'].iloc[0])
-        else: desc_f = col_b.text_input("Descripción")
+        else: desc_f = col_b.text_input("Descripción Trabajo")
 
         cant = col_c.number_input("Cant.", min_value=1, value=1)
         prec = col_p.number_input("Precio $", min_value=0.0, value=p_sug)
@@ -155,84 +166,81 @@ else:
 
             total_f = sum(i['Subtotal'] for i in st.session_state.carrito)
             st.subheader(f"Total: ${total_f:,.2f}")
-            if st.button("💾 GUARDAR Y PDF", use_container_width=True):
+            if st.button("💾 GENERAR PDF Y GUARDAR", use_container_width=True):
                 id_p = str(uuid.uuid4())[:8].upper()
                 tz = pytz.timezone('America/Argentina/Buenos_Aires')
                 f_h = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
-                res_df = pd.DataFrame([{"usuario": taller['usuario'], "id_presupuesto": id_p, "cliente": cli_f, "vehiculo": vehi, "fecha": f_h, "total": total_f}])
+                
+                # Guardar en Sheets
+                res_df = pd.DataFrame([{"usuario": taller['usuario'], "id_presupuesto": id_p, "cliente": cli_data['nombre'], "vehiculo": vehi, "fecha": f_h, "total": total_f}])
                 det_df = pd.DataFrame([{"usuario": taller['usuario'], "id_presupuesto": id_p, "descripcion": i["Descripción"], "cantidad": i["Cantidad"], "precio": i["Precio Unit."], "subtotal": i["Subtotal"]} for i in st.session_state.carrito])
                 conn.update(worksheet="Resumen", data=pd.concat([conn.read(worksheet="Resumen"), res_df], ignore_index=True))
                 conn.update(worksheet="Detalles", data=pd.concat([conn.read(worksheet="Detalles"), det_df], ignore_index=True))
-                pdf_b = crear_pdf(cli_f, vehi, st.session_state.carrito, total_f, id_p, taller, f_h)
-                st.download_button("📥 Descargar", pdf_b, f"Presu_{cli_f}.pdf")
-                if tel_w: st.link_button("📲 Enviar WhatsApp", f"https://wa.me/{tel_w}?text={urllib.parse.quote(f'Presupuesto de {taller.get('nombre_taller')} por ${total_f:,.2f}')}")
+                
+                # Generar PDF con info completa
+                pdf_b = crear_pdf(cli_data, vehi, st.session_state.carrito, total_f, id_p, taller, f_h)
+                st.download_button("📥 Descargar PDF", pdf_b, f"Presu_{cli_data['nombre']}.pdf")
+                if tel_w: st.link_button("📲 Enviar WhatsApp", f"https://wa.me/{tel_w}?text={urllib.parse.quote(f'Hola, te envío el presupuesto de {taller.get('nombre_taller')} por ${total_f:,.2f}')}")
                 st.session_state.carrito = []; st.cache_data.clear()
 
-    # --- TAB 2: CLIENTES (BÚSQUEDA Y EDICIÓN) ---
+    # --- TAB 2: GESTIÓN DE CLIENTES ---
     with tabs[1]:
-        st.subheader("Gestión de Clientes")
-        with st.expander("➕ Registrar Nuevo Cliente"):
+        st.subheader("Clientes")
+        with st.expander("➕ Nuevo Cliente"):
             with st.form("f_new_cli", clear_on_submit=True):
                 n_c = st.text_input("Nombre y Apellido")
-                t_c = st.text_input("Teléfono (Ej: 549...)")
-                if st.form_submit_button("Guardar Cliente"):
+                t_c = st.text_input("Teléfono (549...)")
+                d_c = st.text_input("Domicilio")
+                l_c = st.text_input("Localidad")
+                if st.form_submit_button("Guardar"):
                     df_c_act = conn.read(worksheet="Clientes")
-                    new_c = pd.DataFrame([{"nombre": n_c, "telefono": t_c}])
+                    new_c = pd.DataFrame([{"nombre": n_c, "telefono": t_c, "domicilio": d_c, "localidad": l_c}])
                     conn.update(worksheet="Clientes", data=pd.concat([df_c_act, new_c], ignore_index=True).sort_values("nombre"))
-                    st.success("Guardado"); st.cache_data.clear(); st.rerun()
+                    st.success("Cliente guardado"); st.cache_data.clear(); st.rerun()
 
         st.write("---")
-        st.subheader("🔍 Buscar y Editar")
+        st.subheader("🔍 Buscador y Editor")
         try:
             df_c_edit = conn.read(worksheet="Clientes").sort_values("nombre")
-            busqueda = st.text_input("Buscar por nombre...", placeholder="Escribe para filtrar...")
+            busq = st.text_input("Buscar por nombre...", key="bus_cli")
+            df_fil = df_c_edit[df_c_edit['nombre'].str.contains(busq, case=False, na=False)] if busq else df_c_edit
             
-            # Filtrar dataframe según búsqueda
-            df_filtrado = df_c_edit[df_c_edit['nombre'].str.contains(busqueda, case=False, na=False)] if busqueda else df_c_edit
-            
-            # Editor de clientes
-            edited_c = st.data_editor(df_filtrado, num_rows="dynamic", use_container_width=True, key="ed_cli")
-            
-            if st.button("💾 Guardar cambios en Clientes"):
-                # Combinamos los datos editados con los originales para no perder los que no se mostraron por el filtro
-                if busqueda:
-                    df_final_c = pd.concat([df_c_edit[~df_c_edit['nombre'].str.contains(busqueda, case=False, na=False)], edited_c]).sort_values("nombre")
-                else:
-                    df_final_c = edited_c.sort_values("nombre")
+            edited_c = st.data_editor(df_fil, num_rows="dynamic", use_container_width=True, key="ed_cli_v3")
+            if st.button("💾 Guardar cambios de Clientes"):
+                if busq:
+                    df_final_c = pd.concat([df_c_edit[~df_c_edit['nombre'].str.contains(busq, case=False, na=False)], edited_c]).sort_values("nombre")
+                else: df_final_c = edited_c.sort_values("nombre")
                 conn.update(worksheet="Clientes", data=df_final_c)
-                st.success("Lista de clientes actualizada"); st.cache_data.clear()
-        except: st.info("No hay clientes registrados.")
+                st.success("Lista actualizada"); st.cache_data.clear()
+        except: st.info("Carga clientes para ver la lista.")
 
-    # --- TAB 3: STOCK Y PRECIOS ---
+    # --- TAB 3: STOCK ---
     with tabs[2]:
-        st.subheader("Gestión de Precios")
-        with st.expander("➕ Agregar Repuesto/Servicio"):
+        st.subheader("Precios de Servicios/Repuestos")
+        with st.expander("➕ Nuevo Item"):
             with st.form("f_new_pre", clear_on_submit=True):
                 it_n = st.text_input("Descripción"); pr_n = st.number_input("Precio $", min_value=0.0)
                 if st.form_submit_button("Guardar"):
                     df_p_act = conn.read(worksheet="Precios")
                     conn.update(worksheet="Precios", data=pd.concat([df_p_act, pd.DataFrame([{"item": it_n, "precio": pr_n}])], ignore_index=True).sort_values("item"))
                     st.success("Item guardado"); st.cache_data.clear(); st.rerun()
-
         st.write("---")
         try:
             df_p_edit = conn.read(worksheet="Precios").sort_values("item")
             busq_p = st.text_input("Filtrar items...", key="bq_p")
             df_p_filtro = df_p_edit[df_p_edit['item'].str.contains(busq_p, case=False, na=False)] if busq_p else df_p_edit
-            
             edited_p = st.data_editor(df_p_filtro, num_rows="dynamic", use_container_width=True, key="ed_pre")
-            if st.button("💾 Guardar cambios en Precios"):
+            if st.button("💾 Guardar cambios de Precios"):
                 if busq_p:
                     df_f_p = pd.concat([df_p_edit[~df_p_edit['item'].str.contains(busq_p, case=False, na=False)], edited_p]).sort_values("item")
-                else:
-                    df_f_p = edited_p.sort_values("item")
+                else: df_f_p = edited_p.sort_values("item")
                 conn.update(worksheet="Precios", data=df_f_p)
                 st.success("Precios actualizados"); st.cache_data.clear()
-        except: st.info("Sin items.")
+        except: st.info("Lista vacía.")
 
     # --- TAB 4: HISTORIAL ---
     with tabs[3]:
-        st.subheader("Historial de Presupuestos")
+        st.subheader("Historial")
         try:
             df_r = conn.read(worksheet="Resumen")
             df_d = conn.read(worksheet="Detalles")
@@ -241,4 +249,4 @@ else:
                 with st.expander(f"📅 {row['fecha']} - {row['cliente']} - {row['vehiculo']}"):
                     st.table(df_d[df_d['id_presupuesto'] == row['id_presupuesto']])
                     st.write(f"**Total: ${row['total']:,.2f}**")
-        except: st.info("No hay registros.")
+        except: st.info("Sin registros.")
