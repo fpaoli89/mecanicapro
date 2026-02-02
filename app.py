@@ -70,10 +70,10 @@ def crear_pdf(cliente_info, vehiculo, items, total, id_p, info_taller, fecha_str
     
     pdf.set_font("Arial", "", 9)
     for i in items:
-        pdf.cell(100, 8, f" {i['Descripción']}", 1)
-        pdf.cell(20, 8, str(i['Cantidad']), 1, 0, "C")
-        pdf.cell(35, 8, f"${i['Precio Unit.']:,.2f}", 1, 0, "R")
-        pdf.cell(35, 8, f"${i['Subtotal']:,.2f}", 1, 1, "R")
+        pdf.cell(100, 8, f" {i['Descripción'] if 'Descripción' in i else i['descripcion']}", 1)
+        pdf.cell(20, 8, str(i['Cantidad'] if 'Cantidad' in i else i['cantidad']), 1, 0, "C")
+        pdf.cell(35, 8, f"${float(i['Precio Unit.'] if 'Precio Unit.' in i else i['precio']):,.2f}", 1, 0, "R")
+        pdf.cell(35, 8, f"${float(i['Subtotal'] if 'Subtotal' in i else i['subtotal']):,.2f}", 1, 1, "R")
 
     pdf.ln(3)
     pdf.set_font("Arial", "B", 12); pdf.set_fill_color(30, 60, 120); pdf.set_text_color(255, 255, 255)
@@ -171,8 +171,8 @@ else:
 
     # --- TAB 2: CLIENTES ---
     with tabs[1]:
-        st.subheader("Fichas de Clientes")
-        with st.expander("➕ Registrar Nuevo Cliente"):
+        st.subheader("Gestión de Clientes")
+        with st.expander("➕ Nuevo Cliente"):
             with st.form("f_new_cli", clear_on_submit=True):
                 n_c = st.text_input("Nombre y Apellido")
                 t_c = st.text_input("Teléfono")
@@ -187,59 +187,59 @@ else:
         st.write("---")
         try:
             df_c_edit = conn.read(worksheet="Clientes").astype(str).sort_values("nombre")
-            bus_cli = st.text_input("🔎 Filtrar por nombre...")
+            bus_cli = st.text_input("🔎 Filtrar cliente...")
             df_fil = df_c_edit[df_c_edit['nombre'].str.contains(bus_cli, case=False, na=False)] if bus_cli else df_c_edit
             ed_cli = st.data_editor(df_fil, num_rows="dynamic", use_container_width=True)
             if st.button("💾 Guardar cambios Clientes"):
                 df_final_c = pd.concat([df_c_edit[~df_c_edit['nombre'].str.contains(bus_cli, case=False, na=False)], ed_cli]).sort_values("nombre") if bus_cli else ed_cli
                 conn.update(worksheet="Clientes", data=df_final_c)
                 st.success("Base de datos actualizada"); st.cache_data.clear()
-        except: st.info("Carga clientes para ver la lista.")
+        except: st.info("Sin datos.")
 
     # --- TAB 3: STOCK ---
     with tabs[2]:
-        st.subheader("Lista de Precios")
+        st.subheader("Precios")
         try:
             df_p_edit = conn.read(worksheet="Precios").sort_values("item")
             ed_pre = st.data_editor(df_p_edit, num_rows="dynamic", use_container_width=True)
             if st.button("💾 Guardar cambios Precios"):
                 conn.update(worksheet="Precios", data=ed_pre)
                 st.success("Precios actualizados"); st.cache_data.clear()
-        except: st.info("No hay items cargados.")
+        except: st.info("Carga items en Stock.")
 
-    # --- TAB 4: HISTORIAL (FILTRADO AVANZADO) ---
+    # --- TAB 4: HISTORIAL (CON RE-IMPRESIÓN) ---
     with tabs[3]:
-        st.subheader("Consulta de Presupuestos")
+        st.subheader("Consulta e Impresión")
         try:
             df_r = conn.read(worksheet="Resumen")
             df_d = conn.read(worksheet="Detalles")
+            df_c_info = conn.read(worksheet="Clientes").astype(str)
             
-            # Conversión de fecha para filtrado
             df_r['fecha_dt'] = pd.to_datetime(df_r['fecha']).dt.date
+            f1, f2 = st.columns(2)
+            filtro_nombre = f1.text_input("🔎 Buscar Cliente Historial")
+            rango_fecha = f2.date_input("📅 Rango", value=(date.today(), date.today()))
             
-            # Filtros en columnas
-            f1, f2 = st.columns([2, 2])
-            filtro_nombre = f1.text_input("🔎 Buscar Cliente", placeholder="Nombre del cliente...")
-            rango_fecha = f2.date_input("📅 Rango de Fecha", value=(date.today(), date.today()), key="rango_h")
-            
-            # Aplicar filtros
             mask = (df_r['usuario'] == taller['usuario'])
-            if filtro_nombre:
-                mask &= df_r['cliente'].str.contains(filtro_nombre, case=False, na=False)
-            
-            if len(rango_fecha) == 2:
-                mask &= (df_r['fecha_dt'] >= rango_fecha[0]) & (df_r['fecha_dt'] <= rango_fecha[1])
+            if filtro_nombre: mask &= df_r['cliente'].str.contains(filtro_nombre, case=False, na=False)
+            if len(rango_fecha) == 2: mask &= (df_r['fecha_dt'] >= rango_fecha[0]) & (df_r['fecha_dt'] <= rango_fecha[1])
             
             df_hist_filtro = df_r[mask].sort_values('fecha', ascending=False)
             
-            st.write(f"Se encontraron **{len(df_hist_filtro)}** presupuestos.")
-            
             for _, row in df_hist_filtro.iterrows():
                 with st.expander(f"📄 {row['fecha']} | {row['cliente']} | ${row['total']:,.0f}"):
-                    st.write(f"**Vehículo:** {row['vehiculo']}")
-                    st.write("**Detalles:**")
                     items_presu = df_d[df_d['id_presupuesto'] == row['id_presupuesto']]
+                    st.write(f"**Vehículo:** {row['vehiculo']}")
                     st.table(items_presu[['descripcion', 'cantidad', 'precio', 'subtotal']])
-                    st.write(f"**ID:** {row['id_presupuesto']}")
-        except Exception as e:
-            st.info("No se encontraron registros o error en la carga.")
+                    
+                    # Lógica para re-obtener domicilio/localidad al reimprimir
+                    info_c_re = df_c_info[df_c_info['nombre'] == row['cliente']]
+                    c_re_data = {
+                        "nombre": row['cliente'],
+                        "domicilio": info_c_re['domicilio'].iloc[0] if not info_c_re.empty else "",
+                        "localidad": info_c_re['localidad'].iloc[0] if not info_c_re.empty else ""
+                    }
+                    
+                    pdf_re = crear_pdf(c_re_data, row['vehiculo'], items_presu.to_dict('records'), row['total'], row['id_presupuesto'], taller, row['fecha'])
+                    st.download_button("📥 Volver a descargar PDF", pdf_re, f"Re_Presu_{row['id_presupuesto']}.pdf", key=f"re_{row['id_presupuesto']}")
+        except: st.info("No hay registros que coincidan.")
